@@ -1,13 +1,18 @@
-# app.py - SIMPLIFIED - No numpy needed!
+# app.py - SIMPLIFIED with Live PHP API Integration
 import os
 import json
 import random
+import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
+
+# Configuration
+API_KEY = "ML_API_ASFWGKISD"
+PHP_API_URL = "https://log2.health-ease-hospital.com/admin/api.php"  
 
 # Sample data for demonstration
 REAL_STATS = {
@@ -101,12 +106,68 @@ def predict_delay_probability(driver_id, distance_km, hour):
     
     return min(0.9, max(0.1, base + distance_factor + time_factor + driver_factor))
 
+# Live PHP API integration functions
+def get_live_summary_from_php():
+    """Fetch live data from your PHP API"""
+    try:
+        print(f"🔄 Fetching live data from PHP API: {PHP_API_URL}")
+        
+        response = requests.get(
+            f"{PHP_API_URL}?action=summary&api_key={API_KEY}",
+            timeout=5,
+            verify=False  # Disable SSL verification if needed
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            print(f"✅ Live data fetched successfully: {data.get('success', False)}")
+            return data
+        else:
+            print(f"⚠️  PHP API returned status: {response.status_code}")
+            return None
+    except requests.exceptions.Timeout:
+        print("⚠️  PHP API timeout - server may be sleeping")
+        return None
+    except requests.exceptions.ConnectionError:
+        print("⚠️  PHP API connection error - server may be offline")
+        return None
+    except Exception as e:
+        print(f"⚠️  Error fetching from PHP API: {e}")
+        return None
+
+def get_live_driver_performance(driver_id):
+    """Fetch live driver data from your PHP API"""
+    try:
+        print(f"🔄 Fetching live driver data for ID: {driver_id}")
+        
+        response = requests.post(
+            PHP_API_URL,
+            data={'action': 'driver-performance', 'driver_id': driver_id, 'api_key': API_KEY},
+            timeout=3,
+            verify=False
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            print(f"✅ Live driver data fetched: {data.get('success', False)}")
+            return data
+        else:
+            print(f"⚠️  PHP API returned status: {response.status_code}")
+            return None
+    except requests.exceptions.Timeout:
+        print("⚠️  PHP API timeout for driver data")
+        return None
+    except Exception as e:
+        print(f"⚠️  Error fetching driver data: {e}")
+        return None
+
 @app.route('/')
 def home():
     return jsonify({
         'message': 'Driver ML API 🤖 - Powered by TRAINED ML Models',
         'status': 'running',
         'ml_status': 'active',
+        'live_api': 'connected' if PHP_API_URL else 'disabled',
         'model_accuracy': {
             'performance': '98.7% (trained locally)',
             'delay_prediction': '70.6% (trained locally)'
@@ -118,7 +179,20 @@ def home():
 
 @app.route('/get-ml-summary', methods=['GET'])
 def get_ml_summary():
-    """ML summary using YOUR trained model statistics"""
+    """ML summary using live data from PHP API or trained model statistics"""
+    print("📊 Getting ML summary...")
+    
+    # Try to get live data first
+    live_data = get_live_summary_from_php()
+    
+    if live_data and live_data.get('success'):
+        print("✅ Using live data from PHP API")
+        live_data['source'] = 'php_api_live'
+        live_data['timestamp'] = datetime.now().isoformat()
+        return jsonify(live_data)
+    
+    # Fallback to trained model data
+    print("ℹ️  Using trained model data as fallback")
     if MODELS_LOADED and REAL_STATS:
         drivers = REAL_STATS.get('drivers', {})
         trips = REAL_STATS.get('trips', {})
@@ -142,16 +216,18 @@ def get_ml_summary():
                 }
             },
             'top_drivers': REAL_STATS.get('top_drivers', []),
-            'source': 'trained_ml_models',
+            'source': 'trained_ml_models_fallback',
             'ml_training': {
                 'performance_accuracy': '98.7%',
                 'delay_accuracy': '70.6%',
                 'algorithm': 'Random Forest (scikit-learn)',
                 'training_data': 'Your actual database'
             },
-            'note': 'Models trained locally with scikit-learn, deployed as mock models'
+            'note': 'Models trained locally with scikit-learn, deployed as mock models',
+            'timestamp': datetime.now().isoformat()
         })
     else:
+        # Ultimate fallback
         return jsonify({
             'success': True,
             'summary': {
@@ -166,17 +242,29 @@ def get_ml_summary():
                     'needs_improvement': 1
                 }
             },
-            'source': 'trained_fallback'
+            'source': 'static_fallback',
+            'timestamp': datetime.now().isoformat()
         })
 
 @app.route('/get-driver-performance', methods=['POST'])
 def get_driver_performance():
-    """Get driver performance using patterns from your trained model"""
+    """Get driver performance with live data first, fallback to mock"""
     try:
         data = request.json
         driver_id = data.get('driver_id', 1)
+        print(f"👤 Getting performance for driver ID: {driver_id}")
         
-        # Use the pattern from your trained model (98.7% accuracy!)
+        # Try to get live data first
+        live_data = get_live_driver_performance(driver_id)
+        
+        if live_data and live_data.get('success'):
+            print("✅ Using live driver data from PHP API")
+            live_data['source'] = 'php_api_live'
+            live_data['timestamp'] = datetime.now().isoformat()
+            return jsonify(live_data)
+        
+        # Fallback to trained model pattern
+        print("ℹ️  Using trained model pattern as fallback")
         score = predict_performance(driver_id)
         
         # Determine category
@@ -207,11 +295,18 @@ def get_driver_performance():
                 'algorithm': 'Random Forest',
                 'features_used': ['completed_trips', 'on_time_rate', 'avg_distance', 'experience'],
                 'note': 'Pattern from your locally trained scikit-learn model'
-            }
+            },
+            'source': 'trained_model_fallback',
+            'timestamp': datetime.now().isoformat()
         })
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f"❌ Error in get-driver-performance: {e}")
+        return jsonify({
+            'success': False, 
+            'error': str(e),
+            'source': 'error_fallback'
+        }), 500
 
 @app.route('/predict-delay', methods=['POST'])
 def predict_delay():
@@ -220,6 +315,8 @@ def predict_delay():
         data = request.json
         driver_id = data.get('driver_id', 1)
         distance_km = float(data.get('distance_km', 25))
+        
+        print(f"⏱️  Predicting delay for driver {driver_id}, distance {distance_km}km")
         
         # Get current hour
         hour = datetime.now().hour
@@ -243,17 +340,24 @@ def predict_delay():
                 'algorithm': 'Random Forest Classifier',
                 'features_used': ['distance_km', 'hour_of_day', 'driver_experience', 'day_of_week'],
                 'note': 'Pattern from your locally trained scikit-learn model'
-            }
+            },
+            'timestamp': datetime.now().isoformat()
         })
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f"❌ Error in predict-delay: {e}")
+        return jsonify({
+            'success': False, 
+            'error': str(e),
+            'source': 'error_fallback'
+        }), 500
 
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({
         'status': 'ok',
         'service': 'driver-ml-api',
+        'live_api_available': True,
         'timestamp': datetime.now().isoformat()
     })
 
@@ -264,29 +368,63 @@ def get_sample_data():
         'success': True,
         'real_stats': REAL_STATS,
         'training_summary': TRAINING_SUMMARY,
-        'note': 'This data is used when database_stats.json and training_summary.json are not available'
+        'note': 'This data is used when database_stats.json and training_summary.json are not available',
+        'timestamp': datetime.now().isoformat()
+    })
+
+@app.route('/test-live-api', methods=['GET'])
+def test_live_api():
+    """Test endpoint to check PHP API connectivity"""
+    print("🧪 Testing live PHP API connection...")
+    
+    # Test summary endpoint
+    summary_data = get_live_summary_from_php()
+    
+    # Test driver endpoint
+    driver_data = get_live_driver_performance(1)
+    
+    return jsonify({
+        'success': True,
+        'php_api_url': PHP_API_URL,
+        'summary_connection': 'connected' if summary_data else 'failed',
+        'driver_connection': 'connected' if driver_data else 'failed',
+        'timestamp': datetime.now().isoformat(),
+        'note': 'If connections fail, your PHP server may be sleeping or offline'
     })
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     
     print("="*80)
-    print("🚀 DRIVER ML API - SIMPLIFIED DEPLOYMENT")
+    print("🚀 DRIVER ML API - WITH LIVE PHP API INTEGRATION")
     print("="*80)
-    print("✅ ML Status: ACTIVE (Mock models)")
+    print("✅ ML Status: ACTIVE (Mock models with live data)")
+    print("🔗 Live PHP API: ENABLED")
+    print(f"🔑 API Key: {API_KEY[:8]}...")
+    print(f"🌐 PHP API URL: {PHP_API_URL}")
     print("🤖 No numpy/scikit-learn dependency")
     print("⚡ Lightweight deployment")
-    print("📊 Using built-in sample data")
     print("="*80)
-    print(f"🌐 API running on port {port}")
+    print(f"🌐 Flask API running on port {port}")
     print("="*80)
     print("Available endpoints:")
     print("  GET  / - API home")
-    print("  GET  /get-ml-summary - ML model summary")
-    print("  POST /get-driver-performance - Driver performance prediction")
+    print("  GET  /get-ml-summary - ML model summary (live data)")
+    print("  POST /get-driver-performance - Driver performance (live data)")
     print("  POST /predict-delay - Delay prediction")
     print("  GET  /health - Health check")
     print("  GET  /get-sample-data - View sample data")
+    print("  GET  /test-live-api - Test PHP API connection")
+    print("="*80)
+    print("📡 Testing PHP API connection...")
+    
+    # Test connection on startup
+    test_result = get_live_summary_from_php()
+    if test_result:
+        print("✅ PHP API connection successful!")
+    else:
+        print("⚠️  PHP API connection failed - will use fallback data")
+    
     print("="*80)
     
     app.run(host='0.0.0.0', port=port, debug=False)
