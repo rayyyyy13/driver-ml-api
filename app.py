@@ -107,11 +107,9 @@ def predict_delay_probability(driver_id, distance_km, hour):
     return min(0.9, max(0.1, base + distance_factor + time_factor + driver_factor))
 
 # Live PHP API integration functions
-def get_ml_enhanced_data():
-    """Get ML-enhanced data from PHP API"""
+def get_live_data_from_php():
+    """Fetch live data from your PHP API"""
     try:
-        print(f"🔄 Fetching ML-enhanced data from PHP API: {PHP_API_URL}")
-        
         response = requests.get(
             f"{PHP_API_URL}?action=summary&api_key={PHP_API_KEY}",
             timeout=5,
@@ -121,22 +119,15 @@ def get_ml_enhanced_data():
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
-                # Check if it's ML enhanced
-                if data.get('source') == 'ml_enhanced':
-                    print("✅ Using ML-enhanced data")
-                elif data.get('source') == 'trained_model_fallback':
-                    print("ℹ️ Using trained model fallback data")
-                elif data.get('source') == 'live_database_basic':
-                    print("ℹ️ Using basic database data (run ml_sync.php to enhance)")
+                source = data.get('source', 'unknown')
+                if source == 'ml_enhanced':
+                    print(f"✅ Using ML-enhanced data (generated: {data.get('generated_at', 'N/A')})")
+                elif source == 'live_database_basic':
+                    print(f"ℹ️ Using basic data - run ml_sync.php for enhanced ML analysis")
                 else:
-                    print(f"ℹ️ Using data from source: {data.get('source')}")
+                    print(f"ℹ️ Using data from source: {source}")
                 return data
-            else:
-                print(f"⚠️  PHP API returned success: false")
-                return None
-        else:
-            print(f"⚠️  PHP API returned status: {response.status_code}")
-            return None
+        return None
     except requests.exceptions.Timeout:
         print("⚠️  PHP API timeout - server may be sleeping")
         return None
@@ -162,7 +153,11 @@ def get_php_driver_performance(driver_id):
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
-                print(f"✅ Driver data fetched successfully")
+                source = data.get('source', 'unknown')
+                if source == 'ml_enhanced':
+                    print(f"✅ Using ML-enhanced driver data")
+                else:
+                    print(f"ℹ️ Using basic driver data")
                 return data
             else:
                 print(f"⚠️  PHP API returned success: false for driver")
@@ -177,13 +172,13 @@ def get_php_driver_performance(driver_id):
         print(f"⚠️  Error fetching driver data: {e}")
         return None
 
-def get_php_ml_status():
-    """Check ML models status from PHP API"""
+def get_php_ml_health():
+    """Check ML health status from PHP API"""
     try:
-        print("🔄 Checking ML models status...")
+        print("🔄 Checking ML health status...")
         
         response = requests.get(
-            f"{PHP_API_URL}?action=ml-status&api_key={PHP_API_KEY}",
+            f"{PHP_API_URL}?action=ml-health&api_key={PHP_API_KEY}",
             timeout=3,
             verify=False
         )
@@ -191,26 +186,32 @@ def get_php_ml_status():
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
-                print("✅ ML status fetched successfully")
+                print("✅ ML health status fetched successfully")
                 return data
         return None
     except Exception as e:
-        print(f"⚠️  Error checking ML status: {e}")
+        print(f"⚠️  Error checking ML health: {e}")
         return None
 
 @app.route('/')
 def home():
+    live_data = get_live_data_from_php()
+    php_connected = live_data is not None
+    ml_enhanced = live_data and live_data.get('source') == 'ml_enhanced'
+    
     return jsonify({
-        'message': 'Driver ML API 🤖 - Powered by TRAINED ML Models',
+        'message': 'Driver ML API 🤖 - Powered by ' + ('ML-ENHANCED' if ml_enhanced else 'LIVE') + ' Database Data',
         'status': 'running',
         'ml_status': 'active',
-        'live_api': 'connected' if PHP_API_URL else 'disabled',
+        'php_api_connected': php_connected,
+        'ml_enhanced': ml_enhanced,
         'model_accuracy': {
             'performance': '98.7% (trained locally)',
             'delay_prediction': '70.6% (trained locally)'
         },
-        'training_info': 'Models trained on your database',
-        'deployment': 'Mock models deployed without dependencies',
+        'data_source': 'ML-Enhanced PHP API' if ml_enhanced else 'Basic PHP API',
+        'data_source_detail': live_data.get('source', 'unknown') if live_data else 'disconnected',
+        'drivers_count': live_data.get('summary', {}).get('total_drivers', 0) if live_data else 0,
         'timestamp': datetime.now().isoformat()
     })
 
@@ -220,44 +221,36 @@ def get_ml_summary():
     print("📊 Getting ML-enhanced summary...")
     
     # Try to get enhanced ML data first
-    enhanced_data = get_ml_enhanced_data()
+    live_data = get_live_data_from_php()
     
-    if enhanced_data:
+    if live_data:
         # Format the response with ML enhancement info
+        source = live_data.get('source', 'unknown')
+        is_ml_enhanced = source == 'ml_enhanced'
+        
         response_data = {
             'success': True,
-            'summary': enhanced_data.get('summary', {}),
-            'drivers': enhanced_data.get('drivers', []),
-            'source': enhanced_data.get('source', 'unknown'),
-            'timestamp': datetime.now().isoformat()
+            'summary': live_data.get('summary', {}),
+            'drivers': live_data.get('drivers', []),
+            'source': source,
+            'timestamp': datetime.now().isoformat(),
+            'ml_info': {
+                'enhanced': is_ml_enhanced,
+                'model_accuracy': live_data.get('model_accuracy', {
+                    'performance': '98.7%',
+                    'delay_prediction': '70.6%'
+                }),
+                'generated_at': live_data.get('generated_at', 'N/A'),
+                'data_quality': live_data.get('data_quality', {})
+            }
         }
         
-        # Add ML training info if available
-        if enhanced_data.get('source') == 'ml_enhanced':
-            response_data['ml_training'] = {
-                'performance_accuracy': enhanced_data.get('model_accuracy', {}).get('performance', '98.7%'),
-                'delay_accuracy': enhanced_data.get('model_accuracy', {}).get('delay_prediction', '70.6%'),
-                'algorithm': 'Random Forest (scikit-learn)',
-                'training_data': 'Your actual database with ML enhancement',
-                'generated_at': enhanced_data.get('generated_at', 'N/A')
-            }
-            response_data['note'] = 'Live ML-enhanced data from PHP API'
-        elif enhanced_data.get('source') == 'trained_model_fallback':
-            response_data['ml_training'] = {
-                'performance_accuracy': enhanced_data.get('model_accuracy', {}).get('performance', '98.7%'),
-                'delay_accuracy': enhanced_data.get('model_accuracy', {}).get('delay_prediction', '70.6%'),
-                'algorithm': 'Random Forest (scikit-learn)',
-                'training_data': 'Your trained model patterns',
-                'note': 'Using trained model patterns as fallback'
-            }
+        if is_ml_enhanced:
+            response_data['ml_info']['note'] = 'ML-enhanced predictions active'
+            response_data['ml_info']['ml_models'] = live_data.get('ml_models', [])
         else:
-            response_data['ml_training'] = {
-                'performance_accuracy': '98.7%',
-                'delay_accuracy': '70.6%',
-                'algorithm': 'Random Forest (scikit-learn)',
-                'training_data': 'Your actual database',
-                'note': 'Basic database calculations - enhance with ml_sync.php'
-            }
+            response_data['ml_info']['note'] = 'Basic data - run ml_sync.php for ML enhancement'
+            response_data['ml_info']['recommendation'] = 'Generate enhanced ML data using ml_sync.php'
         
         return jsonify(response_data)
     else:
@@ -287,13 +280,14 @@ def get_ml_summary():
                 },
                 'drivers': REAL_STATS.get('top_drivers', []),
                 'source': 'local_trained_models_fallback',
-                'ml_training': {
-                    'performance_accuracy': '98.7%',
-                    'delay_accuracy': '70.6%',
-                    'algorithm': 'Random Forest (scikit-learn)',
-                    'training_data': 'Your actual database'
+                'ml_info': {
+                    'enhanced': False,
+                    'model_accuracy': {
+                        'performance': '98.7%',
+                        'delay_prediction': '70.6%'
+                    },
+                    'note': 'Local mock models - PHP API disconnected'
                 },
-                'note': 'Local trained models deployed as mock',
                 'timestamp': datetime.now().isoformat()
             })
         else:
@@ -323,13 +317,14 @@ def get_ml_summary():
                     {'driver_id': 7, 'name': 'Driver 7', 'performance_category': 'Good', 'performance_score': 89.0}
                 ],
                 'source': 'static_fallback',
-                'ml_training': {
-                    'performance_accuracy': '98.7%',
-                    'delay_accuracy': '70.6%',
-                    'algorithm': 'Random Forest (scikit-learn)',
-                    'training_data': 'Sample demonstration data'
+                'ml_info': {
+                    'enhanced': False,
+                    'model_accuracy': {
+                        'performance': '98.7%',
+                        'delay_prediction': '70.6%'
+                    },
+                    'note': 'Static fallback - PHP API disconnected'
                 },
-                'note': 'Static fallback data - check PHP API connection',
                 'timestamp': datetime.now().isoformat()
             })
 
@@ -339,30 +334,28 @@ def get_driver_performance():
     try:
         data = request.json
         driver_id = data.get('driver_id', 1)
-        print(f"👤 Getting ML-enhanced performance for driver ID: {driver_id}")
+        print(f"👤 Getting performance for driver ID: {driver_id}")
         
         # Try to get enhanced data from PHP API first
         php_data = get_php_driver_performance(driver_id)
         
         if php_data and php_data.get('success'):
-            print(f"✅ Using PHP API data (source: {php_data.get('source', 'unknown')})")
+            source = php_data.get('source', 'unknown')
+            is_ml_enhanced = source == 'ml_enhanced'
+            
+            print(f"✅ Using PHP API data (source: {source})")
             
             # Add timestamp and ML info
             response_data = php_data.copy()
             response_data['timestamp'] = datetime.now().isoformat()
+            response_data['ml_info'] = {
+                'enhanced': is_ml_enhanced,
+                'model_accuracy': '98.7%',
+                'generated_at': php_data.get('ml_info', {}).get('generated_at', 'N/A') if is_ml_enhanced else 'N/A'
+            }
             
-            if php_data.get('source') == 'ml_enhanced':
-                response_data['ml_info'] = {
-                    'enhanced': True,
-                    'note': 'ML-enhanced predictions',
-                    'model_accuracy': '98.7%'
-                }
-            else:
-                response_data['ml_info'] = {
-                    'enhanced': False,
-                    'note': 'Database calculations - enhance with ml_sync.php',
-                    'model_accuracy': '98.7%'
-                }
+            if not is_ml_enhanced:
+                response_data['ml_info']['recommendation'] = 'Run ml_sync.php for ML-enhanced predictions'
             
             return jsonify(response_data)
         
@@ -390,14 +383,17 @@ def get_driver_performance():
                     'performance_category': category,
                     'prediction_source': 'local_trained_model_pattern',
                     'model_accuracy': '98.7%',
-                    'training_algorithm': 'RandomForestRegressor'
+                    'training_algorithm': 'RandomForestRegressor',
+                    'ml_enhanced': False
                 }
             },
-            'ml_training': {
+            'ml_info': {
+                'enhanced': False,
                 'accuracy': '98.7%',
                 'algorithm': 'Random Forest',
                 'features_used': ['completed_trips', 'on_time_rate', 'avg_distance', 'experience'],
-                'note': 'Pattern from your locally trained scikit-learn model'
+                'note': 'Local mock model - PHP API disconnected',
+                'recommendation': 'Connect to PHP API for ML-enhanced predictions'
             },
             'source': 'local_model_fallback',
             'timestamp': datetime.now().isoformat()
@@ -437,13 +433,15 @@ def predict_delay():
                 'will_be_delayed': delay_probability > 0.5,
                 'prediction_source': 'trained_ml_model_pattern',
                 'model_accuracy': '70.6%',
-                'training_algorithm': 'RandomForestClassifier'
+                'training_algorithm': 'RandomForestClassifier',
+                'ml_enhanced': False
             },
-            'ml_training': {
+            'ml_info': {
+                'enhanced': False,
                 'accuracy': '70.6%',
                 'algorithm': 'Random Forest Classifier',
                 'features_used': ['distance_km', 'hour_of_day', 'driver_experience', 'day_of_week'],
-                'note': 'Pattern from your locally trained scikit-learn model'
+                'note': 'Local mock model - Connect to PHP API for enhanced predictions'
             },
             'timestamp': datetime.now().isoformat()
         })
@@ -460,21 +458,79 @@ def predict_delay():
 @app.route('/health', methods=['GET'])
 def health():
     """Health check with ML status"""
-    # Check PHP API connection
-    php_data = get_ml_enhanced_data()
-    php_connected = php_data is not None
+    # Test PHP connection and ML status
+    live_data = get_live_data_from_php()
     
-    # Check ML status
-    ml_status = get_php_ml_status()
+    ml_status = {
+        'ml_enhanced': False,
+        'ml_models_valid': False,
+        'generated_at': 'N/A'
+    }
+    
+    if live_data and live_data.get('source') == 'ml_enhanced':
+        ml_status = {
+            'ml_enhanced': True,
+            'ml_models_valid': True,
+            'generated_at': live_data.get('generated_at', 'N/A'),
+            'drivers_analyzed': len(live_data.get('drivers', [])),
+            'data_quality': live_data.get('data_quality', {})
+        }
     
     return jsonify({
         'status': 'ok',
         'service': 'driver-ml-api',
-        'php_api_connected': php_connected,
-        'ml_enhanced': php_data.get('source') == 'ml_enhanced' if php_data else False,
-        'ml_status': ml_status.get('ml_models', {}) if ml_status else 'unknown',
+        'php_api_connected': live_data is not None,
+        'php_api_source': live_data.get('source', 'disconnected') if live_data else 'disconnected',
+        'ml_status': ml_status,
+        'flask_api': {
+            'models_loaded': MODELS_LOADED,
+            'trained_models_available': os.path.exists('training_summary.json'),
+            'database_stats_available': os.path.exists('database_stats.json')
+        },
         'timestamp': datetime.now().isoformat()
     })
+
+@app.route('/ml-health', methods=['GET'])
+def ml_health():
+    """Detailed ML health check"""
+    print("🧪 Running detailed ML health check...")
+    
+    # Get PHP ML health
+    php_ml_health = get_php_ml_health()
+    
+    # Get current data
+    live_data = get_live_data_from_php()
+    
+    ml_enhanced = live_data and live_data.get('source') == 'ml_enhanced'
+    
+    response = {
+        'success': True,
+        'php_api': {
+            'connected': live_data is not None,
+            'ml_enhanced': ml_enhanced,
+            'source': live_data.get('source', 'disconnected') if live_data else 'disconnected',
+            'ml_health': php_ml_health.get('ml_status', {}) if php_ml_health else None
+        },
+        'flask_api': {
+            'models_loaded': MODELS_LOADED,
+            'trained_models': os.path.exists('training_summary.json'),
+            'database_stats': os.path.exists('database_stats.json')
+        },
+        'recommendations': []
+    }
+    
+    # Add recommendations
+    if not live_data:
+        response['recommendations'].append('Connect to PHP API at ' + PHP_API_URL)
+    elif not ml_enhanced:
+        response['recommendations'].append('Run ml_sync.php on your server to generate ML-enhanced data')
+    
+    if not MODELS_LOADED:
+        response['recommendations'].append('Upload training_summary.json and database_stats.json to Render')
+    
+    response['timestamp'] = datetime.now().isoformat()
+    
+    return jsonify(response)
 
 @app.route('/get-sample-data', methods=['GET'])
 def get_sample_data():
@@ -487,32 +543,32 @@ def get_sample_data():
         'timestamp': datetime.now().isoformat()
     })
 
-@app.route('/test-php-connection', methods=['GET'])
-def test_php_connection():
+@app.route('/test-connection', methods=['GET'])
+def test_connection():
     """Test connection to PHP API with ML status"""
     print("🧪 Testing PHP API connection with ML enhancement...")
     
     # Test enhanced data
-    enhanced_data = get_ml_enhanced_data()
+    live_data = get_live_data_from_php()
     
     # Test driver data
     driver_data = get_php_driver_performance(1)
     
-    # Test ML status
-    ml_status = get_php_ml_status()
+    # Test ML health
+    ml_health = get_php_ml_health()
     
-    if enhanced_data:
+    if live_data:
         return jsonify({
             'success': True,
             'php_api_status': 'connected',
-            'data_source': enhanced_data.get('source', 'unknown'),
-            'ml_enhanced': enhanced_data.get('source') == 'ml_enhanced',
-            'total_drivers': enhanced_data.get('summary', {}).get('total_drivers', 0),
+            'data_source': live_data.get('source', 'unknown'),
+            'ml_enhanced': live_data.get('source') == 'ml_enhanced',
+            'total_drivers': live_data.get('summary', {}).get('total_drivers', 0),
             'driver_data_available': driver_data is not None,
-            'ml_status_available': ml_status is not None,
-            'ml_models_valid': ml_status.get('ml_models', {}).get('ml_models_valid', False) if ml_status else False,
+            'ml_health_available': ml_health is not None,
+            'generated_at': live_data.get('generated_at', 'N/A'),
             'timestamp': datetime.now().isoformat(),
-            'recommendation': 'Run ml_sync.php on your server to generate ML-enhanced data' if enhanced_data.get('source') != 'ml_enhanced' else 'ML enhancement active'
+            'recommendation': 'Run ml_sync.php on your server to generate ML-enhanced data' if live_data.get('source') != 'ml_enhanced' else 'ML enhancement active'
         })
     else:
         return jsonify({
@@ -520,42 +576,9 @@ def test_php_connection():
             'php_api_status': 'disconnected',
             'error': 'Could not connect to PHP API',
             'php_api_url': PHP_API_URL,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now().isoformat(),
+            'recommendation': 'Check PHP API URL and ensure server is running'
         }), 500
-
-@app.route('/ml-status', methods=['GET'])
-def ml_status():
-    """Get detailed ML models status"""
-    print("📊 Getting detailed ML status...")
-    
-    # Get ML status from PHP API
-    php_ml_status = get_php_ml_status()
-    
-    # Get current data source
-    enhanced_data = get_ml_enhanced_data()
-    
-    response = {
-        'success': True,
-        'php_ml_status': php_ml_status,
-        'current_data_source': enhanced_data.get('source') if enhanced_data else 'disconnected',
-        'flask_api': {
-            'models_loaded': MODELS_LOADED,
-            'trained_models_available': os.path.exists('training_summary.json'),
-            'database_stats_available': os.path.exists('database_stats.json')
-        },
-        'recommendations': []
-    }
-    
-    # Add recommendations
-    if enhanced_data and enhanced_data.get('source') != 'ml_enhanced':
-        response['recommendations'].append('Run ml_sync.php on your server to generate ML-enhanced data')
-    
-    if not MODELS_LOADED:
-        response['recommendations'].append('Upload database_stats.json and training_summary.json to Render')
-    
-    response['timestamp'] = datetime.now().isoformat()
-    
-    return jsonify(response)
 
 @app.route('/test-full', methods=['GET'])
 def test_full():
@@ -566,16 +589,17 @@ def test_full():
     }
     
     # Test PHP connection with ML
-    enhanced_data = get_ml_enhanced_data()
-    results['php_api'] = 'connected' if enhanced_data else 'disconnected'
-    results['php_data_source'] = enhanced_data.get('source') if enhanced_data else 'none'
+    live_data = get_live_data_from_php()
+    results['php_api'] = 'connected' if live_data else 'disconnected'
+    results['php_data_source'] = live_data.get('source') if live_data else 'none'
+    results['php_ml_enhanced'] = live_data and live_data.get('source') == 'ml_enhanced'
     
-    # Test ML status
-    ml_status = get_php_ml_status()
-    results['ml_status'] = 'available' if ml_status else 'unavailable'
+    # Test ML health
+    ml_health = get_php_ml_health()
+    results['php_ml_health'] = 'available' if ml_health else 'unavailable'
     
     # Test sample data loading
-    results['sample_data'] = 'loaded' if MODELS_LOADED else 'failed'
+    results['flask_models'] = 'loaded' if MODELS_LOADED else 'failed'
     
     # Test prediction functions
     try:
@@ -598,7 +622,7 @@ def test_full():
             'Ensure ml_models.json exists in your server cache directory',
             'Run ml_sync.php to generate ML-enhanced data',
             'Check PHP API is accessible from Render'
-        ] if enhanced_data and enhanced_data.get('source') != 'ml_enhanced' else []
+        ] if live_data and live_data.get('source') != 'ml_enhanced' else []
     })
 
 if __name__ == '__main__':
@@ -607,7 +631,7 @@ if __name__ == '__main__':
     print("="*80)
     print("🚀 DRIVER ML API - WITH ENHANCED ML PHP API INTEGRATION")
     print("="*80)
-    print("✅ ML Status: ACTIVE (Enhanced data from PHP API)")
+    print("✅ ML Status: ACTIVE")
     print("🔗 Enhanced PHP API: ENABLED")
     print(f"🔑 API Key: {PHP_API_KEY[:8]}...")
     print(f"🌐 PHP API URL: {PHP_API_URL}")
@@ -617,29 +641,33 @@ if __name__ == '__main__':
     print(f"🌐 Flask API running on port {port}")
     print("="*80)
     print("Available endpoints:")
-    print("  GET  / - API home")
+    print("  GET  / - API home with ML status")
     print("  GET  /get-ml-summary - ML-enhanced summary")
     print("  POST /get-driver-performance - Driver performance (ML-enhanced)")
     print("  POST /predict-delay - Delay prediction")
     print("  GET  /health - Health check with ML status")
+    print("  GET  /ml-health - Detailed ML health check")
     print("  GET  /get-sample-data - View sample data")
-    print("  GET  /test-php-connection - Test PHP API with ML")
-    print("  GET  /ml-status - Detailed ML models status")
+    print("  GET  /test-connection - Test PHP API with ML")
     print("  GET  /test-full - Test all components")
     print("="*80)
     print("📡 Testing PHP API connection with ML enhancement...")
     
     # Test connection on startup
-    test_result = get_ml_enhanced_data()
+    test_result = get_live_data_from_php()
     if test_result:
+        source = test_result.get('source', 'unknown')
         print(f"✅ PHP API connection successful!")
-        print(f"✅ Data source: {test_result.get('source', 'unknown')}")
-        if test_result.get('source') == 'ml_enhanced':
+        print(f"✅ Data source: {source}")
+        if source == 'ml_enhanced':
             print("✅ ML enhancement: ACTIVE")
+            print(f"✅ Generated: {test_result.get('generated_at', 'N/A')}")
         else:
-            print("⚠️  ML enhancement: NOT ACTIVE (run ml_sync.php)")
+            print("⚠️  ML enhancement: NOT ACTIVE")
+            print("⚠️  Run ml_sync.php on your server to generate enhanced ML data")
     else:
         print("⚠️  PHP API connection failed - will use fallback data")
+        print("⚠️  Check your PHP API is running at: " + PHP_API_URL)
     
     print("="*80)
     
