@@ -12,7 +12,7 @@ CORS(app)
 
 # Configuration
 API_KEY = "ML_API_ASFWGKISD"
-PHP_API_URL = "https://log2.health-ease-hospital.com/admin/api.php"  
+PHP_API_URL = "https://log2.health-ease-hospital.com/admin/api.php"
 
 # Sample data for demonstration
 REAL_STATS = {
@@ -107,7 +107,7 @@ def predict_delay_probability(driver_id, distance_km, hour):
     return min(0.9, max(0.1, base + distance_factor + time_factor + driver_factor))
 
 # Live PHP API integration functions
-def get_live_summary_from_php():
+def get_live_data_from_php():
     """Fetch live data from your PHP API"""
     try:
         print(f"🔄 Fetching live data from PHP API: {PHP_API_URL}")
@@ -120,8 +120,12 @@ def get_live_summary_from_php():
         
         if response.status_code == 200:
             data = response.json()
-            print(f"✅ Live data fetched successfully: {data.get('success', False)}")
-            return data
+            if data.get('success'):
+                print(f"✅ Live data fetched successfully!")
+                return data
+            else:
+                print(f"⚠️  PHP API returned success: false")
+                return None
         else:
             print(f"⚠️  PHP API returned status: {response.status_code}")
             return None
@@ -149,8 +153,12 @@ def get_live_driver_performance(driver_id):
         
         if response.status_code == 200:
             data = response.json()
-            print(f"✅ Live driver data fetched: {data.get('success', False)}")
-            return data
+            if data.get('success'):
+                print(f"✅ Live driver data fetched successfully")
+                return data
+            else:
+                print(f"⚠️  PHP API returned success: false for driver")
+                return None
         else:
             print(f"⚠️  PHP API returned status: {response.status_code}")
             return None
@@ -179,72 +187,94 @@ def home():
 
 @app.route('/get-ml-summary', methods=['GET'])
 def get_ml_summary():
-    """ML summary using live data from PHP API or trained model statistics"""
+    """Try to get live data first, fallback to mock"""
     print("📊 Getting ML summary...")
     
     # Try to get live data first
-    live_data = get_live_summary_from_php()
+    live_data = get_live_data_from_php()
     
-    if live_data and live_data.get('success'):
+    if live_data:
         print("✅ Using live data from PHP API")
-        live_data['source'] = 'php_api_live'
-        live_data['timestamp'] = datetime.now().isoformat()
-        return jsonify(live_data)
-    
-    # Fallback to trained model data
-    print("ℹ️  Using trained model data as fallback")
-    if MODELS_LOADED and REAL_STATS:
-        drivers = REAL_STATS.get('drivers', {})
-        trips = REAL_STATS.get('trips', {})
-        
-        completed = trips.get('completed_trips', 0) or 1
-        on_time = trips.get('on_time_trips', 0) or 0
-        on_time_rate = (on_time / completed) * 100
-        
+        # Format the response to match your expected structure
         return jsonify({
             'success': True,
-            'summary': {
-                'total_drivers': drivers.get('total_drivers', 0),
-                'active_drivers': drivers.get('active_drivers', 0),
-                'average_on_time_rate': round(on_time_rate, 1),
-                'average_performance_score': 78.5,
-                'performance_distribution': REAL_STATS.get('performance_distribution', {}),
-                'distance_analysis': {
-                    'average_trip_distance_km': round(trips.get('avg_distance', 28.5), 1),
-                    'maximum_trip_distance_km': round(trips.get('max_distance', 65.3), 1),
-                    'total_distance_km': round(trips.get('total_distance', 2450), 0)
-                }
-            },
-            'top_drivers': REAL_STATS.get('top_drivers', []),
-            'source': 'trained_ml_models_fallback',
+            'summary': live_data.get('summary', {}),
+            'drivers': live_data.get('drivers', []),
+            'source': 'live_php_api',
             'ml_training': {
                 'performance_accuracy': '98.7%',
                 'delay_accuracy': '70.6%',
                 'algorithm': 'Random Forest (scikit-learn)',
                 'training_data': 'Your actual database'
             },
-            'note': 'Models trained locally with scikit-learn, deployed as mock models',
+            'note': 'Live data from PHP API',
             'timestamp': datetime.now().isoformat()
         })
     else:
-        # Ultimate fallback
-        return jsonify({
-            'success': True,
-            'summary': {
-                'total_drivers': 24,
-                'active_drivers': 18,
-                'average_on_time_rate': 82.5,
-                'average_performance_score': 78.5,
-                'performance_distribution': {
-                    'excellent': 4,
-                    'good': 8,
-                    'average': 5,
-                    'needs_improvement': 1
-                }
-            },
-            'source': 'static_fallback',
-            'timestamp': datetime.now().isoformat()
-        })
+        # Fallback to trained model data
+        print("ℹ️  Using trained model data as fallback")
+        if MODELS_LOADED and REAL_STATS:
+            drivers = REAL_STATS.get('drivers', {})
+            trips = REAL_STATS.get('trips', {})
+            
+            completed = trips.get('completed_trips', 0) or 1
+            on_time = trips.get('on_time_trips', 0) or 0
+            on_time_rate = (on_time / completed) * 100
+            
+            return jsonify({
+                'success': True,
+                'summary': {
+                    'total_drivers': drivers.get('total_drivers', 0),
+                    'active_drivers': drivers.get('active_drivers', 0),
+                    'average_on_time_rate': round(on_time_rate, 1),
+                    'average_performance_score': 78.5,
+                    'performance_distribution': REAL_STATS.get('performance_distribution', {}),
+                    'distance_analysis': {
+                        'average_trip_distance_km': round(trips.get('avg_distance', 28.5), 1),
+                        'maximum_trip_distance_km': round(trips.get('max_distance', 65.3), 1),
+                        'total_distance_km': round(trips.get('total_distance', 2450), 0)
+                    }
+                },
+                'drivers': REAL_STATS.get('top_drivers', []),
+                'source': 'trained_ml_models_fallback',
+                'ml_training': {
+                    'performance_accuracy': '98.7%',
+                    'delay_accuracy': '70.6%',
+                    'algorithm': 'Random Forest (scikit-learn)',
+                    'training_data': 'Your actual database'
+                },
+                'note': 'Models trained locally with scikit-learn, deployed as mock models',
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            # Ultimate fallback
+            return jsonify({
+                'success': True,
+                'summary': {
+                    'total_drivers': 24,
+                    'active_drivers': 18,
+                    'average_on_time_rate': 82.5,
+                    'average_performance_score': 78.5,
+                    'performance_distribution': {
+                        'excellent': 4,
+                        'good': 8,
+                        'average': 5,
+                        'needs_improvement': 1
+                    },
+                    'distance_analysis': {
+                        'average_trip_distance_km': 28.5,
+                        'maximum_trip_distance_km': 65.3,
+                        'total_distance_km': 2450
+                    }
+                },
+                'drivers': [
+                    {'driver_id': 1, 'name': 'Driver 1', 'performance_category': 'Excellent', 'performance_score': 95.0},
+                    {'driver_id': 3, 'name': 'Driver 3', 'performance_category': 'Excellent', 'performance_score': 92.5},
+                    {'driver_id': 7, 'name': 'Driver 7', 'performance_category': 'Good', 'performance_score': 89.0}
+                ],
+                'source': 'static_fallback',
+                'timestamp': datetime.now().isoformat()
+            })
 
 @app.route('/get-driver-performance', methods=['POST'])
 def get_driver_performance():
@@ -372,24 +402,62 @@ def get_sample_data():
         'timestamp': datetime.now().isoformat()
     })
 
-@app.route('/test-live-api', methods=['GET'])
-def test_live_api():
-    """Test endpoint to check PHP API connectivity"""
-    print("🧪 Testing live PHP API connection...")
+@app.route('/test-php-connection', methods=['GET'])
+def test_php_connection():
+    """Test connection to PHP API"""
+    print("🧪 Testing PHP API connection...")
+    live_data = get_live_data_from_php()
     
-    # Test summary endpoint
-    summary_data = get_live_summary_from_php()
+    if live_data:
+        return jsonify({
+            'success': True,
+            'php_api_status': 'connected',
+            'data_received': True,
+            'total_drivers': live_data.get('summary', {}).get('total_drivers', 0),
+            'timestamp': datetime.now().isoformat(),
+            'response_keys': list(live_data.keys()) if isinstance(live_data, dict) else []
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'php_api_status': 'disconnected',
+            'error': 'Could not connect to PHP API',
+            'php_api_url': PHP_API_URL,
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+@app.route('/test-full', methods=['GET'])
+def test_full():
+    """Test all components"""
+    results = {
+        'flask_api': 'running',
+        'timestamp': datetime.now().isoformat()
+    }
     
-    # Test driver endpoint
-    driver_data = get_live_driver_performance(1)
+    # Test PHP connection
+    live_data = get_live_data_from_php()
+    results['php_api'] = 'connected' if live_data else 'disconnected'
+    
+    # Test sample data loading
+    results['sample_data'] = 'loaded' if MODELS_LOADED else 'failed'
+    
+    # Test prediction functions
+    try:
+        score = predict_performance(1)
+        delay = predict_delay_probability(1, 25, 12)
+        results['prediction_functions'] = 'working'
+        results['sample_score'] = score
+        results['sample_delay_prob'] = delay
+    except Exception as e:
+        results['prediction_functions'] = f'error: {str(e)}'
     
     return jsonify({
         'success': True,
-        'php_api_url': PHP_API_URL,
-        'summary_connection': 'connected' if summary_data else 'failed',
-        'driver_connection': 'connected' if driver_data else 'failed',
-        'timestamp': datetime.now().isoformat(),
-        'note': 'If connections fail, your PHP server may be sleeping or offline'
+        'results': results,
+        'configuration': {
+            'php_api_url': PHP_API_URL,
+            'api_key_masked': API_KEY[:8] + '...' if API_KEY else 'not_set'
+        }
     })
 
 if __name__ == '__main__':
@@ -414,14 +482,16 @@ if __name__ == '__main__':
     print("  POST /predict-delay - Delay prediction")
     print("  GET  /health - Health check")
     print("  GET  /get-sample-data - View sample data")
-    print("  GET  /test-live-api - Test PHP API connection")
+    print("  GET  /test-php-connection - Test PHP API connection")
+    print("  GET  /test-full - Test all components")
     print("="*80)
     print("📡 Testing PHP API connection...")
     
     # Test connection on startup
-    test_result = get_live_summary_from_php()
+    test_result = get_live_data_from_php()
     if test_result:
         print("✅ PHP API connection successful!")
+        print(f"✅ Response keys: {list(test_result.keys())}")
     else:
         print("⚠️  PHP API connection failed - will use fallback data")
     
