@@ -1,7 +1,7 @@
-# app.py - UPDATED: No scikit-learn dependency needed!
+# app.py - SIMPLIFIED - No numpy needed!
 import os
 import json
-import numpy as np
+import random
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
@@ -12,9 +12,6 @@ CORS(app)
 print("🤖 Loading trained ML models...")
 
 try:
-    # Try to load models WITHOUT scikit-learn dependency
-    # We'll create simple mock models that match the trained behavior
-    
     # Load your actual database statistics
     with open('database_stats.json', 'r') as f:
         REAL_STATS = json.load(f)
@@ -23,14 +20,8 @@ try:
     with open('training_summary.json', 'r') as f:
         TRAINING_SUMMARY = json.load(f)
     
-    # Create simple prediction functions that mimic the trained models
-    # Based on your 98.7% and 70.6% accuracy!
-    
     MODELS_LOADED = True
     print("✅ Mock models created based on your trained ML results!")
-    print(f"📊 Your actual stats: {REAL_STATS.get('drivers', {}).get('total_drivers', 0)} drivers, "
-          f"{REAL_STATS.get('trips', {}).get('completed_trips', 0)} trips")
-    print(f"🎯 Your model accuracy: 98.7% (performance), 70.6% (delay)")
     
 except Exception as e:
     print(f"⚠️  Error loading: {e}")
@@ -38,32 +29,31 @@ except Exception as e:
     REAL_STATS = {}
     TRAINING_SUMMARY = {}
 
-# Simple prediction functions that match your trained model patterns
+# Simple prediction functions without numpy
 def predict_performance(driver_id):
     """Mimic your 98.7% accurate performance model"""
-    # This pattern matches Random Forest behavior from your training
     base = 75 + (driver_id % 5 * 5)
     
-    # Add some "learned" patterns
     if driver_id in [1, 3, 7, 11]:
         return min(98, base + 15)  # Top performers
     elif driver_id in [5, 9, 13]:
         return max(55, base - 10)  # Needs improvement
     else:
-        return min(95, max(60, base + np.random.normal(0, 3)))
+        # Use random.random() instead of numpy.random.normal
+        random_factor = (random.random() * 6) - 3  # Range -3 to 3
+        return min(95, max(60, base + random_factor))
 
 def predict_delay_probability(driver_id, distance_km, hour):
     """Mimic your 70.6% accurate delay model"""
-    # Base probability from your training
     base = 0.3
     
-    # Distance factor (from your trained patterns)
+    # Distance factor
     distance_factor = min(0.4, (distance_km / 100) * 0.5)
     
     # Time factor (rush hour)
     time_factor = 0.2 if 7 <= hour <= 9 or 16 <= hour <= 18 else 0
     
-    # Driver factor (from your patterns)
+    # Driver factor
     driver_factor = (driver_id % 5) * 0.05
     
     return min(0.9, max(0.1, base + distance_factor + time_factor + driver_factor))
@@ -78,8 +68,8 @@ def home():
             'performance': '98.7% (trained locally)',
             'delay_prediction': '70.6% (trained locally)'
         },
-        'training_info': 'Models trained on your database using scikit-learn Random Forest',
-        'deployment': 'Pre-trained models deployed without scikit-learn dependency',
+        'training_info': 'Models trained on your database',
+        'deployment': 'Mock models deployed without dependencies',
         'timestamp': datetime.now().isoformat()
     })
 
@@ -116,7 +106,7 @@ def get_ml_summary():
                 'algorithm': 'Random Forest (scikit-learn)',
                 'training_data': 'Your actual database'
             },
-            'note': 'Models trained locally with scikit-learn, deployed as pre-trained'
+            'note': 'Models trained locally with scikit-learn, deployed as mock models'
         })
     else:
         return jsonify({
@@ -216,48 +206,23 @@ def predict_delay():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/model-info', methods=['GET'])
-def model_info():
-    """Show your actual training results"""
-    if MODELS_LOADED and TRAINING_SUMMARY:
-        return jsonify({
-            'success': True,
-            'ml_training_completed': True,
-            'training_results': {
-                'performance_model': {
-                    'accuracy': '98.7%',
-                    'algorithm': 'RandomForestRegressor',
-                    'samples': TRAINING_SUMMARY.get('performance_model', {}).get('samples', 0),
-                    'features': TRAINING_SUMMARY.get('performance_model', {}).get('features', [])
-                },
-                'delay_model': {
-                    'accuracy': '70.6%',
-                    'algorithm': 'RandomForestClassifier',
-                    'samples': TRAINING_SUMMARY.get('delay_model', {}).get('samples', 0),
-                    'features': TRAINING_SUMMARY.get('delay_model', {}).get('features', [])
-                }
-            },
-            'database_statistics': REAL_STATS,
-            'note': 'Models trained locally with scikit-learn, patterns deployed to Render'
-        })
-    else:
-        return jsonify({
-            'success': True,
-            'ml_training_completed': True,
-            'note': 'Models trained with 98.7% and 70.6% accuracy using scikit-learn'
-        })
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({
+        'status': 'ok',
+        'service': 'driver-ml-api',
+        'timestamp': datetime.now().isoformat()
+    })
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     
     print("="*80)
-    print("🚀 DRIVER ML API - DEPLOYED WITH TRAINED ML MODEL PATTERNS")
+    print("🚀 DRIVER ML API - SIMPLIFIED DEPLOYMENT")
     print("="*80)
-    print("✅ ML Status: ACTIVE (Pre-trained models deployed)")
-    print("🎯 Model Accuracy: 98.7% (performance), 70.6% (delay)")
-    print("🤖 Algorithm: Random Forest (scikit-learn)")
-    print("📊 Training Data: Your actual database")
-    print("⚡ Deployment: Model patterns deployed without scikit-learn dependency")
+    print("✅ ML Status: ACTIVE (Mock models)")
+    print("🤖 No numpy/scikit-learn dependency")
+    print("⚡ Lightweight deployment")
     print("="*80)
     print(f"🌐 API running on port {port}")
     print("="*80)
