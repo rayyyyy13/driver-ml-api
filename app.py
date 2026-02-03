@@ -217,41 +217,62 @@ def home():
 
 @app.route('/get-ml-summary', methods=['GET'])
 def get_ml_summary():
-    """Get ML summary using enhanced data from PHP API"""
-    print("📊 Getting ML-enhanced summary...")
+    """Get ML summary - Try live data first"""
+    print("📊 Getting ML summary...")
     
-    # Try to get enhanced ML data first
     live_data = get_live_data_from_php()
     
     if live_data:
-        # Format the response with ML enhancement info
+        summary = live_data.get('summary', {})
         source = live_data.get('source', 'unknown')
         is_ml_enhanced = source == 'ml_enhanced'
         
+        # Ensure trip_statistics exists, use default if not
+        trip_statistics = summary.get('trip_statistics', {})
+        if not trip_statistics:
+            # Fallback to calculating from summary data
+            trip_statistics = {
+                'completed_trips': summary.get('distance_analysis', {}).get('estimated_trips', 0) or 0,
+                'estimated_trips': True
+            }
+        
+        # Build response with proper trip statistics
         response_data = {
             'success': True,
-            'summary': live_data.get('summary', {}),
+            'summary': {
+                'total_drivers': summary.get('total_drivers', 0),
+                'active_drivers': summary.get('active_drivers', 0),
+                'average_on_time_rate': summary.get('average_on_time_rate', 75.0),
+                'average_performance_score': summary.get('average_performance_score', 78.5),
+                'performance_distribution': summary.get('performance_distribution', {
+                    'excellent': 0, 'good': 0, 'average': 0, 'needs_improvement': 0
+                }),
+                'distance_analysis': summary.get('distance_analysis', {
+                    'average_trip_distance_km': 25.0,
+                    'maximum_trip_distance_km': 50.0,
+                    'total_distance_km': 1000.0
+                }),
+                'trip_statistics': trip_statistics
+            },
             'drivers': live_data.get('drivers', []),
             'source': source,
-            'timestamp': datetime.now().isoformat(),
             'ml_info': {
                 'enhanced': is_ml_enhanced,
+                'generated_at': live_data.get('generated_at', ''),
                 'model_accuracy': live_data.get('model_accuracy', {
                     'performance': '98.7%',
                     'delay_prediction': '70.6%'
                 }),
-                'generated_at': live_data.get('generated_at', 'N/A'),
-                'data_quality': live_data.get('data_quality', {})
-            }
+                'data_quality': live_data.get('data_quality', {}),
+                'note': 'ML-enhanced predictions active' if is_ml_enhanced else 'Basic data analysis'
+            },
+            'timestamp': datetime.now().isoformat()
         }
         
-        if is_ml_enhanced:
-            response_data['ml_info']['note'] = 'ML-enhanced predictions active'
-            response_data['ml_info']['ml_models'] = live_data.get('ml_models', [])
-        else:
-            response_data['ml_info']['note'] = 'Basic data - run ml_sync.php for ML enhancement'
-            response_data['ml_info']['recommendation'] = 'Generate enhanced ML data using ml_sync.php'
+        if not is_ml_enhanced:
+            response_data['ml_info']['recommendation'] = 'Run ml_sync.php for ML enhancement'
         
+        print(f"✅ Using {source} data with {trip_statistics.get('completed_trips', 0)} completed trips")
         return jsonify(response_data)
     else:
         # Fallback to trained model data
@@ -271,11 +292,19 @@ def get_ml_summary():
                     'active_drivers': drivers.get('active_drivers', 0),
                     'average_on_time_rate': round(on_time_rate, 1),
                     'average_performance_score': 78.5,
-                    'performance_distribution': REAL_STATS.get('performance_distribution', {}),
+                    'performance_distribution': REAL_STATS.get('performance_distribution', {
+                        'excellent': 0, 'good': 0, 'average': 0, 'needs_improvement': 0
+                    }),
                     'distance_analysis': {
                         'average_trip_distance_km': round(trips.get('avg_distance', 28.5), 1),
                         'maximum_trip_distance_km': round(trips.get('max_distance', 65.3), 1),
                         'total_distance_km': round(trips.get('total_distance', 2450), 0)
+                    },
+                    'trip_statistics': {
+                        'completed_trips': trips.get('completed_trips', 150),
+                        'on_time_trips': trips.get('on_time_trips', 120),
+                        'total_trips': trips.get('total_trips', 200),
+                        'note': 'Mock data - PHP API disconnected'
                     }
                 },
                 'drivers': REAL_STATS.get('top_drivers', []),
@@ -286,7 +315,8 @@ def get_ml_summary():
                         'performance': '98.7%',
                         'delay_prediction': '70.6%'
                     },
-                    'note': 'Local mock models - PHP API disconnected'
+                    'note': 'Local mock models - PHP API disconnected',
+                    'recommendation': 'Connect to PHP API for real data'
                 },
                 'timestamp': datetime.now().isoformat()
             })
@@ -309,6 +339,12 @@ def get_ml_summary():
                         'average_trip_distance_km': 28.5,
                         'maximum_trip_distance_km': 65.3,
                         'total_distance_km': 2450
+                    },
+                    'trip_statistics': {
+                        'completed_trips': 150,
+                        'on_time_trips': 120,
+                        'total_trips': 200,
+                        'note': 'Static fallback data'
                     }
                 },
                 'drivers': [
@@ -323,7 +359,8 @@ def get_ml_summary():
                         'performance': '98.7%',
                         'delay_prediction': '70.6%'
                     },
-                    'note': 'Static fallback - PHP API disconnected'
+                    'note': 'Static fallback - PHP API disconnected',
+                    'recommendation': 'Check PHP API connection'
                 },
                 'timestamp': datetime.now().isoformat()
             })
@@ -558,12 +595,16 @@ def test_connection():
     ml_health = get_php_ml_health()
     
     if live_data:
+        trip_stats = live_data.get('summary', {}).get('trip_statistics', {})
+        completed_trips = trip_stats.get('completed_trips', 0)
+        
         return jsonify({
             'success': True,
             'php_api_status': 'connected',
             'data_source': live_data.get('source', 'unknown'),
             'ml_enhanced': live_data.get('source') == 'ml_enhanced',
             'total_drivers': live_data.get('summary', {}).get('total_drivers', 0),
+            'completed_trips': completed_trips,
             'driver_data_available': driver_data is not None,
             'ml_health_available': ml_health is not None,
             'generated_at': live_data.get('generated_at', 'N/A'),
@@ -593,6 +634,12 @@ def test_full():
     results['php_api'] = 'connected' if live_data else 'disconnected'
     results['php_data_source'] = live_data.get('source') if live_data else 'none'
     results['php_ml_enhanced'] = live_data and live_data.get('source') == 'ml_enhanced'
+    
+    # Get trip statistics if available
+    if live_data:
+        trip_stats = live_data.get('summary', {}).get('trip_statistics', {})
+        results['completed_trips'] = trip_stats.get('completed_trips', 0)
+        results['trip_data_available'] = results['completed_trips'] > 0
     
     # Test ML health
     ml_health = get_php_ml_health()
@@ -657,8 +704,13 @@ if __name__ == '__main__':
     test_result = get_live_data_from_php()
     if test_result:
         source = test_result.get('source', 'unknown')
+        trip_stats = test_result.get('summary', {}).get('trip_statistics', {})
+        completed_trips = trip_stats.get('completed_trips', 0)
+        
         print(f"✅ PHP API connection successful!")
         print(f"✅ Data source: {source}")
+        print(f"✅ Completed trips: {completed_trips}")
+        
         if source == 'ml_enhanced':
             print("✅ ML enhancement: ACTIVE")
             print(f"✅ Generated: {test_result.get('generated_at', 'N/A')}")
