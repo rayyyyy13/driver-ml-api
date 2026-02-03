@@ -1,3 +1,5 @@
+now this is my app.py 
+
 # app.py - SIMPLIFIED with Enhanced ML PHP API Integration
 import os
 import json
@@ -724,3 +726,88 @@ if __name__ == '__main__':
     print("="*80)
     
     app.run(host='0.0.0.0', port=port, debug=False)
+
+Fix the "150 trips" issue in app.py:
+Update your app.py file on Render:
+
+python
+# In the get_ml_summary function, update this section:
+@app.route('/get-ml-summary', methods=['GET'])
+def get_ml_summary():
+    """Get ML summary - Try live data first"""
+    live_data = get_live_data_from_php()
+    
+    if live_data:
+        summary = live_data['summary']
+        
+        # Use the actual completed trips count from your PHP API
+        completed_trips = summary.get('trip_statistics', {}).get('completed_trips', 1)
+        
+        return jsonify({
+            'success': True,
+            'summary': {
+                'total_drivers': summary.get('total_drivers', 0),
+                'active_drivers': summary.get('active_drivers', 0),
+                'average_on_time_rate': summary.get('average_on_time_rate', 50.0),
+                'average_performance_score': summary.get('average_performance_score', 78.5),
+                'performance_distribution': summary.get('performance_distribution', {
+                    'excellent': 0, 'good': 0, 'average': 0, 'needs_improvement': 0
+                }),
+                'distance_analysis': summary.get('distance_analysis', {
+                    'average_trip_distance_km': 25.0,
+                    'maximum_trip_distance_km': 50.0,
+                    'total_distance_km': 1000.0
+                }),
+                'trip_statistics': {
+                    'completed_trips': completed_trips  # Use real value
+                }
+            },
+            'drivers': live_data.get('drivers', []),
+            'source': 'ml_enhanced',
+            'ml_training': {
+                'performance_accuracy': '98.7%',
+                'delay_accuracy': '70.6%',
+                'algorithm': 'Random Forest (scikit-learn)',
+                'training_data': 'Your actual database'
+            },
+            'note': f'Live data from PHP API - {completed_trips} trips analyzed'
+        })
+    else:
+        # Fallback to basic data
+        return jsonify({
+            'success': True,
+            'summary': {
+                'total_drivers': 17,
+                'active_drivers': 15,
+                'average_on_time_rate': 100.0,
+                'average_performance_score': 73.3,
+                'performance_distribution': {
+                    'excellent': 0,
+                    'good': 1,
+                    'average': 14,
+                    'needs_improvement': 0
+                },
+                'distance_analysis': {
+                    'average_trip_distance_km': 36.5,
+                    'maximum_trip_distance_km': 36.5,
+                    'total_distance_km': 36
+                },
+                'trip_statistics': {
+                    'completed_trips': 1  # Your actual trip count
+                }
+            },
+            'drivers': [
+                {
+                    'driver_id': '1',
+                    'name': 'Juan Dela Cruz',
+                    'performance_score': 73.3,
+                    'performance_category': 'Good',
+                    'avg_distance_km': 24.3
+                }
+            ],
+            'source': 'mock_fallback_with_real_data',
+            'note': 'Using cached data - PHP API not reachable'
+        })
+
+
+write the complete codes with the changes
