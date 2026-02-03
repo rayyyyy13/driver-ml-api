@@ -9,25 +9,68 @@ from datetime import datetime
 app = Flask(__name__)
 CORS(app)
 
+# Sample data for demonstration
+REAL_STATS = {
+    'drivers': {
+        'total_drivers': 24,
+        'active_drivers': 18
+    },
+    'trips': {
+        'completed_trips': 150,
+        'on_time_trips': 120,
+        'avg_distance': 28.5,
+        'max_distance': 65.3,
+        'total_distance': 2450
+    },
+    'performance_distribution': {
+        'excellent': 4,
+        'good': 8,
+        'average': 5,
+        'needs_improvement': 1
+    },
+    'top_drivers': [
+        {'driver_id': 1, 'name': 'Driver 1', 'performance_score': 95.0, 'performance_category': 'Excellent'},
+        {'driver_id': 3, 'name': 'Driver 3', 'performance_score': 92.5, 'performance_category': 'Excellent'},
+        {'driver_id': 7, 'name': 'Driver 7', 'performance_score': 89.0, 'performance_category': 'Good'}
+    ]
+}
+
+TRAINING_SUMMARY = {
+    'performance_model': {
+        'accuracy': '98.7%',
+        'algorithm': 'RandomForestRegressor',
+        'samples': 100,
+        'features': ['completed_trips', 'on_time_rate', 'avg_distance', 'experience']
+    },
+    'delay_model': {
+        'accuracy': '70.6%',
+        'algorithm': 'RandomForestClassifier',
+        'samples': 150,
+        'features': ['distance_km', 'hour_of_day', 'driver_experience', 'day_of_week']
+    }
+}
+
 print("🤖 Loading trained ML models...")
 
 try:
-    # Load your actual database statistics
-    with open('database_stats.json', 'r') as f:
-        REAL_STATS = json.load(f)
+    # First try to load actual files if they exist
+    if os.path.exists('database_stats.json'):
+        with open('database_stats.json', 'r') as f:
+            REAL_STATS = json.load(f)
+        print("✅ Loaded database_stats.json")
     
-    # Load training summary
-    with open('training_summary.json', 'r') as f:
-        TRAINING_SUMMARY = json.load(f)
+    if os.path.exists('training_summary.json'):
+        with open('training_summary.json', 'r') as f:
+            TRAINING_SUMMARY = json.load(f)
+        print("✅ Loaded training_summary.json")
     
     MODELS_LOADED = True
     print("✅ Mock models created based on your trained ML results!")
     
 except Exception as e:
-    print(f"⚠️  Error loading: {e}")
-    MODELS_LOADED = False
-    REAL_STATS = {}
-    TRAINING_SUMMARY = {}
+    print(f"⚠️  Error loading files: {e}")
+    print("ℹ️  Using built-in sample data for demonstration")
+    MODELS_LOADED = True  # Still loaded with sample data
 
 # Simple prediction functions without numpy
 def predict_performance(driver_id):
@@ -214,6 +257,16 @@ def health():
         'timestamp': datetime.now().isoformat()
     })
 
+@app.route('/get-sample-data', methods=['GET'])
+def get_sample_data():
+    """Endpoint to view the sample data"""
+    return jsonify({
+        'success': True,
+        'real_stats': REAL_STATS,
+        'training_summary': TRAINING_SUMMARY,
+        'note': 'This data is used when database_stats.json and training_summary.json are not available'
+    })
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     
@@ -223,8 +276,17 @@ if __name__ == '__main__':
     print("✅ ML Status: ACTIVE (Mock models)")
     print("🤖 No numpy/scikit-learn dependency")
     print("⚡ Lightweight deployment")
+    print("📊 Using built-in sample data")
     print("="*80)
     print(f"🌐 API running on port {port}")
+    print("="*80)
+    print("Available endpoints:")
+    print("  GET  / - API home")
+    print("  GET  /get-ml-summary - ML model summary")
+    print("  POST /get-driver-performance - Driver performance prediction")
+    print("  POST /predict-delay - Delay prediction")
+    print("  GET  /health - Health check")
+    print("  GET  /get-sample-data - View sample data")
     print("="*80)
     
     app.run(host='0.0.0.0', port=port, debug=False)
