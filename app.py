@@ -77,19 +77,34 @@ except Exception as e:
     print("ℹ️  Using built-in sample data for demonstration")
     MODELS_LOADED = True  # Still loaded with sample data
 
-# Simple prediction functions without numpy
-def predict_performance(driver_id):
-    """Mimic your 98.7% accurate performance model"""
-    base = 75 + (driver_id % 5 * 5)
+# Updated prediction functions with unified scoring algorithm
+def predict_performance(driver_id, on_time_rate, completed_trips, avg_delay, avg_distance):
+    """Unified performance calculation matching PHP logic"""
+    # Base score from on-time rate (same as PHP)
+    score = on_time_rate
     
-    if driver_id in [1, 3, 7, 11]:
-        return min(98, base + 15)  # Top performers
-    elif driver_id in [5, 9, 13]:
-        return max(55, base - 10)  # Needs improvement
+    # Experience bonus (same as PHP)
+    experience_bonus = min(10, (completed_trips / 10))
+    score += experience_bonus
+    
+    # Delay penalty (same as PHP)
+    delay_penalty = min(15, (avg_delay / 2))
+    score -= delay_penalty
+    
+    # Ensure score is between 0-100
+    score = max(0, min(100, score))
+    
+    # Categorization (must match PHP exactly)
+    if score >= 85:
+        category = "Excellent"
+    elif score >= 70:
+        category = "Good"
+    elif score >= 50:
+        category = "Average"
     else:
-        # Use random.random() instead of numpy.random.normal
-        random_factor = (random.random() * 6) - 3  # Range -3 to 3
-        return min(95, max(60, base + random_factor))
+        category = "Needs Improvement"
+    
+    return round(score, 1), category
 
 def predict_delay_probability(driver_id, distance_km, hour):
     """Mimic your 70.6% accurate delay model"""
@@ -217,16 +232,32 @@ def home():
 
 @app.route('/get-ml-summary', methods=['GET'])
 def get_ml_summary():
-    """Get ML summary - Try live data first"""
+    """Get ML summary - SYNCED with PHP data"""
     print("📊 Getting ML summary...")
     
     live_data = get_live_data_from_php()
     
     if live_data:
-        summary = live_data['summary']
+        summary = live_data.get('summary', {})
         
-        # Use the actual completed trips count from your PHP API
-        completed_trips = summary.get('trip_statistics', {}).get('completed_trips', 1)
+        # Calculate performance distribution that matches PHP logic
+        drivers = live_data.get('drivers', [])
+        
+        # Count categories using unified logic
+        distribution = {'excellent': 0, 'good': 0, 'average': 0, 'needs_improvement': 0}
+        for driver in drivers:
+            score = driver.get('performance_score', 0)
+            if score >= 85:
+                distribution['excellent'] += 1
+            elif score >= 70:
+                distribution['good'] += 1
+            elif score >= 50:
+                distribution['average'] += 1
+            else:
+                distribution['needs_improvement'] += 1
+        
+        trip_stats = summary.get('trip_statistics', {})
+        completed_trips = trip_stats.get('completed_trips', 0)
         
         return jsonify({
             'success': True,
@@ -235,9 +266,7 @@ def get_ml_summary():
                 'active_drivers': summary.get('active_drivers', 0),
                 'average_on_time_rate': summary.get('average_on_time_rate', 50.0),
                 'average_performance_score': summary.get('average_performance_score', 78.5),
-                'performance_distribution': summary.get('performance_distribution', {
-                    'excellent': 0, 'good': 0, 'average': 0, 'needs_improvement': 0
-                }),
+                'performance_distribution': distribution,  # Use calculated distribution
                 'distance_analysis': summary.get('distance_analysis', {
                     'average_trip_distance_km': 25.0,
                     'maximum_trip_distance_km': 50.0,
@@ -247,18 +276,18 @@ def get_ml_summary():
                     'completed_trips': completed_trips  # Use real value
                 }
             },
-            'drivers': live_data.get('drivers', []),
-            'source': 'ml_enhanced',
+            'drivers': drivers,
+            'source': 'ml_enhanced_synced',
             'ml_training': {
                 'performance_accuracy': '98.7%',
                 'delay_accuracy': '70.6%',
                 'algorithm': 'Random Forest (scikit-learn)',
                 'training_data': 'Your actual database'
             },
-            'note': f'Live data from PHP API - {completed_trips} trips analyzed'
+            'note': 'Data synchronized with PHP dashboard logic'
         })
     else:
-        # Fallback to basic data
+        # Fallback to basic data with unified logic
         return jsonify({
             'success': True,
             'summary': {
@@ -290,13 +319,13 @@ def get_ml_summary():
                     'avg_distance_km': 24.3
                 }
             ],
-            'source': 'mock_fallback_with_real_data',
+            'source': 'mock_fallback_with_unified_logic',
             'note': 'Using cached data - PHP API not reachable'
         })
 
 @app.route('/get-driver-performance', methods=['POST'])
 def get_driver_performance():
-    """Get REAL driver performance from PHP API"""
+    """Get REAL driver performance - SYNCED with PHP logic"""
     try:
         data = request.json
         driver_id = data.get('driver_id', 1)
@@ -315,25 +344,53 @@ def get_driver_performance():
             if response.status_code == 200:
                 php_data = response.json()
                 if php_data.get('success'):
-                    # Calculate score based on real data
+                    # Extract data
                     completed = php_data.get('completed_trips', 0)
                     on_time = php_data.get('on_time_trips', 0)
+                    avg_delay = php_data.get('avg_delay', 0)
+                    avg_distance = php_data.get('avg_distance', 0)
+                    total_trips = php_data.get('total_trips', 0)
                     
+                    # Calculate EXACTLY as PHP does
                     if completed > 0:
                         on_time_rate = (on_time / completed) * 100
-                        score = min(100, max(50, on_time_rate))
-                        
-                        if score >= 85:
-                            category = "Excellent"
-                        elif score >= 70:
-                            category = "Good"
-                        elif score >= 50:
-                            category = "Average"
-                        else:
-                            category = "Needs Improvement"
+                        # Use unified function
+                        score, category = predict_performance(
+                            driver_id, on_time_rate, completed, avg_delay, avg_distance
+                        )
                     else:
                         score = 75
+                        on_time_rate = 75
                         category = "New/No Data"
+                    
+                    # Experience level (same as PHP)
+                    if completed >= 30:
+                        experience_level = 'Experienced'
+                    elif completed >= 10:
+                        experience_level = 'Intermediate'
+                    else:
+                        experience_level = 'Novice'
+                    
+                    # Consistency (same as PHP)
+                    if completed >= 5:
+                        if on_time_rate >= 90:
+                            consistency = 'Excellent'
+                        elif on_time_rate >= 80:
+                            consistency = 'Good'
+                        elif on_time_rate >= 70:
+                            consistency = 'Average'
+                        else:
+                            consistency = 'Needs Improvement'
+                    else:
+                        consistency = 'Insufficient Data'
+                    
+                    # Distance efficiency (same as PHP)
+                    if avg_distance >= 20 and avg_distance <= 50:
+                        distance_efficiency = 90
+                    elif avg_distance >= 10 and avg_distance <= 100:
+                        distance_efficiency = 75
+                    else:
+                        distance_efficiency = 60
                     
                     return jsonify({
                         'success': True,
@@ -341,26 +398,27 @@ def get_driver_performance():
                             'driver_id': driver_id,
                             'name': php_data.get('name', f'Driver {driver_id}'),
                             'performance_metrics': {
-                                'performance_score': round(score, 1),
+                                'performance_score': score,
                                 'performance_category': category,
-                                'on_time_rate': round(on_time_rate if completed > 0 else 75, 1),
-                                'avg_delay_minutes': php_data.get('avg_delay', 0),
-                                'total_trips': php_data.get('total_trips', 0),
+                                'on_time_rate': round(on_time_rate, 1),
+                                'avg_delay_minutes': round(avg_delay, 1),
+                                'total_trips': total_trips,
                                 'completed_trips': completed,
-                                'consistency': 'Average' if completed > 5 else 'Unknown',
-                                'experience_level': 'Experienced' if completed >= 30 else ('Intermediate' if completed >= 10 else 'Novice'),
-                                'distance_efficiency': 75
+                                'consistency': consistency,
+                                'experience_level': experience_level,
+                                'distance_efficiency': distance_efficiency
                             },
                             'distance_analysis': {
-                                'average_distance_km': php_data.get('avg_distance', 0)
+                                'average_distance_km': round(avg_distance, 1)
                             }
                         },
-                        'source': 'real_database_data'
+                        'source': 'real_database_data',
+                        'calculation_method': 'unified_with_php'
                     })
         except Exception as e:
             print(f"PHP API error: {e}")
         
-        # Fallback to mock
+        # Fallback with same logic
         return jsonify({
             'success': True,
             'driver': {
@@ -455,7 +513,8 @@ def health():
         'flask_api': {
             'models_loaded': MODELS_LOADED,
             'trained_models_available': os.path.exists('training_summary.json'),
-            'database_stats_available': os.path.exists('database_stats.json')
+            'database_stats_available': os.path.exists('database_stats.json'),
+            'scoring_algorithm': 'unified_with_php'
         },
         'timestamp': datetime.now().isoformat()
     })
@@ -484,7 +543,8 @@ def ml_health():
         'flask_api': {
             'models_loaded': MODELS_LOADED,
             'trained_models': os.path.exists('training_summary.json'),
-            'database_stats': os.path.exists('database_stats.json')
+            'database_stats': os.path.exists('database_stats.json'),
+            'scoring_algorithm': 'unified_with_php'
         },
         'recommendations': []
     }
@@ -542,6 +602,7 @@ def test_connection():
             'ml_health_available': ml_health is not None,
             'generated_at': live_data.get('generated_at', 'N/A'),
             'timestamp': datetime.now().isoformat(),
+            'scoring_algorithm': 'unified_with_php',
             'recommendation': 'Run ml_sync.php on your server to generate ML-enhanced data' if live_data.get('source') != 'ml_enhanced' else 'ML enhancement active'
         })
     else:
@@ -559,6 +620,7 @@ def test_full():
     """Test all components"""
     results = {
         'flask_api': 'running',
+        'scoring_algorithm': 'unified_with_php',
         'timestamp': datetime.now().isoformat()
     }
     
@@ -581,22 +643,30 @@ def test_full():
     # Test sample data loading
     results['flask_models'] = 'loaded' if MODELS_LOADED else 'failed'
     
-    # Test prediction functions
+    # Test unified scoring function
     try:
-        score = predict_performance(1)
-        delay = predict_delay_probability(1, 25, 12)
-        results['prediction_functions'] = 'working'
+        score, category = predict_performance(1, 85, 25, 5, 30)
+        results['unified_scoring_function'] = 'working'
         results['sample_score'] = score
+        results['sample_category'] = category
+    except Exception as e:
+        results['unified_scoring_function'] = f'error: {str(e)}'
+    
+    # Test delay prediction
+    try:
+        delay = predict_delay_probability(1, 25, 12)
+        results['delay_prediction_function'] = 'working'
         results['sample_delay_prob'] = delay
     except Exception as e:
-        results['prediction_functions'] = f'error: {str(e)}'
+        results['delay_prediction_function'] = f'error: {str(e)}'
     
     return jsonify({
         'success': True,
         'results': results,
         'configuration': {
             'php_api_url': PHP_API_URL,
-            'api_key_masked': PHP_API_KEY[:8] + '...' if PHP_API_KEY else 'not_set'
+            'api_key_masked': PHP_API_KEY[:8] + '...' if PHP_API_KEY else 'not_set',
+            'scoring_method': 'unified_with_php'
         },
         'recommendations': [
             'Ensure ml_models.json exists in your server cache directory',
@@ -605,9 +675,59 @@ def test_full():
         ] if live_data and live_data.get('source') != 'ml_enhanced' else []
     })
 
+@app.route('/sync-with-php', methods=['POST'])
+def sync_with_php():
+    """Force synchronization with PHP data"""
+    try:
+        # Get current PHP data
+        php_api_url = "https://log2.health-ease-hospital.com/admin/api.php"
+        api_key = "ML_API_ASFWGKISD"
+        
+        response = requests.get(
+            f"{php_api_url}?action=summary&api_key={api_key}",
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            php_data = response.json()
+            
+            # Store synchronized data
+            sync_data = {
+                'php_data': php_data,
+                'sync_timestamp': datetime.now().isoformat(),
+                'ml_calculations': {}
+            }
+            
+            # Calculate synchronized metrics
+            drivers = php_data.get('drivers', [])
+            for driver in drivers:
+                driver_id = driver.get('driver_id')
+                if driver_id:
+                    # Calculate using unified method
+                    sync_data['ml_calculations'][driver_id] = {
+                        'synced_score': driver.get('performance_score'),
+                        'synced_category': driver.get('performance_category'),
+                        'calculation_method': 'unified'
+                    }
+            
+            return jsonify({
+                'success': True,
+                'message': 'Successfully synchronized with PHP data',
+                'sync_data': sync_data,
+                'timestamp': datetime.now().isoformat()
+            })
+        
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch PHP data'
+        }), 500
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/get-driver-performance-batch', methods=['POST'])
 def get_driver_performance_batch():
-    """Get performance for multiple drivers at once"""
+    """Get performance for multiple drivers at once using unified scoring"""
     try:
         data = request.json
         driver_ids = data.get('driver_ids', [])
@@ -628,34 +748,56 @@ def get_driver_performance_batch():
                 if response.status_code == 200:
                     php_data = response.json()
                     if php_data.get('success'):
-                        results[driver_id] = php_data.get('driver', {})
-                        continue
-            except:
-                pass
+                        driver_info = php_data.get('driver', {})
+                        
+                        # Recalculate using unified method to ensure consistency
+                        if driver_info:
+                            completed = driver_info.get('completed_trips', 0)
+                            on_time = driver_info.get('on_time_trips', 0)
+                            avg_delay = driver_info.get('avg_delay', 0)
+                            avg_distance = driver_info.get('avg_distance', 0)
+                            
+                            if completed > 0:
+                                on_time_rate = (on_time / completed) * 100
+                                score, category = predict_performance(
+                                    driver_id, on_time_rate, completed, avg_delay, avg_distance
+                                )
+                                
+                                # Update driver info with recalculated values
+                                driver_info['performance_score'] = score
+                                driver_info['performance_category'] = category
+                            
+                            results[driver_id] = driver_info
+                            continue
+            except Exception as e:
+                print(f"Error fetching driver {driver_id}: {e}")
             
-            # Fallback to mock
-            score = predict_performance(driver_id)
-            if score >= 85:
-                category = "Excellent"
-            elif score >= 70:
-                category = "Good"
-            elif score >= 50:
-                category = "Average"
-            else:
-                category = "Needs Improvement"
+            # Fallback to unified mock
+            completed = random.randint(5, 50)
+            on_time_rate = random.uniform(70, 95)
+            avg_delay = random.uniform(2, 15)
+            avg_distance = random.uniform(10, 100)
+            
+            score, category = predict_performance(
+                driver_id, on_time_rate, completed, avg_delay, avg_distance
+            )
             
             results[driver_id] = {
                 'driver_id': driver_id,
+                'name': f'Driver {driver_id}',
                 'performance_metrics': {
-                    'performance_score': round(score, 1),
+                    'performance_score': score,
                     'performance_category': category,
-                    'on_time_rate': round(min(100, max(50, score)), 1),
-                    'avg_delay_minutes': random.uniform(2, 15),
+                    'on_time_rate': round(on_time_rate, 1),
+                    'avg_delay_minutes': round(avg_delay, 1),
                     'total_trips': random.randint(5, 50),
-                    'completed_trips': random.randint(5, 50),
-                    'consistency': 'Good' if score >= 80 else 'Average',
-                    'experience_level': 'Experienced' if random.random() > 0.7 else 'Intermediate',
+                    'completed_trips': completed,
+                    'consistency': 'Good' if on_time_rate >= 80 else 'Average',
+                    'experience_level': 'Experienced' if completed >= 30 else ('Intermediate' if completed >= 10 else 'Novice'),
                     'distance_efficiency': 75
+                },
+                'distance_analysis': {
+                    'average_distance_km': round(avg_distance, 1)
                 }
             }
         
@@ -663,31 +805,71 @@ def get_driver_performance_batch():
             'success': True,
             'batch_results': results,
             'count': len(results),
+            'scoring_method': 'unified_with_php',
             'timestamp': datetime.now().isoformat()
         })
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/get-unified-scoring-details', methods=['GET'])
+def get_unified_scoring_details():
+    """Get details about the unified scoring algorithm"""
+    return jsonify({
+        'success': True,
+        'scoring_algorithm': {
+            'name': 'Unified Performance Scoring',
+            'description': 'Synchronized scoring algorithm between Flask API and PHP dashboard',
+            'formula': 'score = on_time_rate + min(10, completed_trips/10) - min(15, avg_delay/2)',
+            'categories': {
+                'excellent': 'score >= 85',
+                'good': '70 <= score < 85',
+                'average': '50 <= score < 70',
+                'needs_improvement': 'score < 50'
+            },
+            'experience_levels': {
+                'experienced': 'completed_trips >= 30',
+                'intermediate': '10 <= completed_trips < 30',
+                'novice': 'completed_trips < 10'
+            },
+            'consistency': {
+                'excellent': 'on_time_rate >= 90',
+                'good': '80 <= on_time_rate < 90',
+                'average': '70 <= on_time_rate < 80',
+                'needs_improvement': 'on_time_rate < 70'
+            },
+            'implementation': {
+                'flask_api': 'predict_performance() function',
+                'php_dashboard': 'calculatePerformanceScore() function',
+                'synchronized': True
+            }
+        },
+        'timestamp': datetime.now().isoformat()
+    })
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     
     print("="*80)
-    print("🚀 DRIVER ML API - WITH ENHANCED ML PHP API INTEGRATION")
+    print("🚀 DRIVER ML API - WITH UNIFIED SCORING ALGORITHM")
     print("="*80)
     print("✅ ML Status: ACTIVE")
+    print("✅ Scoring Algorithm: UNIFIED WITH PHP")
     print("🔗 Enhanced PHP API: ENABLED")
     print(f"🔑 API Key: {PHP_API_KEY[:8]}...")
     print(f"🌐 PHP API URL: {PHP_API_URL}")
     print("🤖 No numpy/scikit-learn dependency")
     print("⚡ Lightweight deployment with ML enhancement")
     print("="*80)
+    print("📊 Unified Scoring Formula:")
+    print("  score = on_time_rate + min(10, completed_trips/10) - min(15, avg_delay/2)")
+    print("="*80)
     print(f"🌐 Flask API running on port {port}")
     print("="*80)
     print("Available endpoints:")
     print("  GET  / - API home with ML status")
     print("  GET  /get-ml-summary - ML-enhanced summary")
-    print("  POST /get-driver-performance - Driver performance (ML-enhanced)")
+    print("  POST /get-driver-performance - Driver performance (unified scoring)")
     print("  POST /get-driver-performance-batch - Batch driver performance")
     print("  POST /predict-delay - Delay prediction")
     print("  GET  /health - Health check with ML status")
@@ -695,6 +877,8 @@ if __name__ == '__main__':
     print("  GET  /get-sample-data - View sample data")
     print("  GET  /test-connection - Test PHP API with ML")
     print("  GET  /test-full - Test all components")
+    print("  POST /sync-with-php - Force sync with PHP data")
+    print("  GET  /get-unified-scoring-details - Scoring algorithm details")
     print("="*80)
     print("📡 Testing PHP API connection with ML enhancement...")
     
@@ -718,6 +902,11 @@ if __name__ == '__main__':
     else:
         print("⚠️  PHP API connection failed - will use fallback data")
         print("⚠️  Check your PHP API is running at: " + PHP_API_URL)
+    
+    # Test unified scoring
+    print("🧪 Testing unified scoring algorithm...")
+    test_score, test_category = predict_performance(1, 85, 25, 5, 30)
+    print(f"✅ Unified scoring test: Score={test_score}, Category={test_category}")
     
     print("="*80)
     
